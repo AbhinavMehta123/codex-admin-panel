@@ -1,41 +1,39 @@
 "use client";
+import React, { useEffect, useState } from "react";
+import { motion } from "framer-motion";
+import axios from "axios";
+import { socket } from "@/utils/socket";
 
-import { useEffect, useState } from "react";
-import { socket } from "@/utils/socket"; // adjust path if needed
-import { useRouter } from "next/navigation";
-
-export default function AdminPanel() {
-  const router = useRouter();
+export default function AdminDashboard() {
   const [status, setStatus] = useState({ isActive: false, startTime: null });
-  const [loading, setLoading] = useState(false);
-  const token = typeof window !== "undefined" ? localStorage.getItem("adminToken") : null;
+  const [timeLeft, setTimeLeft] = useState(0);
+  const [isConnected, setIsConnected] = useState(false);
 
-  // Fetch current hackathon status
+  // ✅ Connect socket
   useEffect(() => {
-    async function loadStatus() {
-      try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/hackathon/status`);
-        const data = await res.json();
-        setStatus(data || { isActive: false });
-      } catch (err) {
-        console.error("Failed to load hackathon status:", err);
-      }
-    }
-
-    loadStatus();
-
-    // socket connect debug
-    socket.on("connect", () => console.log("🟢 Admin socket connected:", socket.id));
-    socket.on("disconnect", () => console.log("🔴 Admin socket disconnected"));
-
-    // optional: react to remote changes
-    socket.on("hackathon_started", (startTime) => {
-      console.log("Received hackathon_started via socket", startTime);
-      setStatus({ isActive: true, startTime });
+    socket.on("connect", () => {
+      console.log("🟢 Connected to socket:", socket.id);
+      setIsConnected(true);
     });
+
+    socket.on("disconnect", () => {
+      console.log("🔴 Disconnected from socket");
+      setIsConnected(false);
+    });
+
+    socket.on("hackathon_started", (data) => {
+      console.log("🚀 Hackathon started:", data);
+      setStatus({ isActive: true, startTime: new Date().toISOString() });
+    });
+
     socket.on("hackathon_stopped", () => {
-      console.log("Received hackathon_stopped via socket");
+      console.log("🛑 Hackathon stopped");
       setStatus({ isActive: false, startTime: null });
+      setTimeLeft(0);
+    });
+
+    socket.on("timer_update", (remaining) => {
+      setTimeLeft(remaining);
     });
 
     return () => {
@@ -43,106 +41,102 @@ export default function AdminPanel() {
       socket.off("disconnect");
       socket.off("hackathon_started");
       socket.off("hackathon_stopped");
+      socket.off("timer_update");
     };
   }, []);
 
-  // Start hackathon: POST to backend AND emit socket event
-  const handleStart = async () => {
-    setLoading(true);
+  // ✅ Get current hackathon status from backend
+  useEffect(() => {
+    axios
+      .get("https://codex-build-backend.onrender.com/api/hackathon/status")
+      .then((res) => setStatus(res.data))
+      .catch((err) => console.error("Status fetch error:", err));
+  }, []);
+
+  // ✅ Start Timer (emits + updates DB)
+  const startTimer = async () => {
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/hackathon/start`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.message || "Failed to start");
-      const startTime = data.startTime || new Date().toISOString();
-
-      // emit to all connected clients
-      socket.emit("start_hackathon", startTime);
-
-      setStatus({ isActive: true, startTime });
+      await axios.post("https://codex-build-backend.onrender.com/api/hackathon/start");
+      socket.emit("start_hackathon", 110 * 60);
     } catch (err) {
-      console.error("Start error:", err);
-      alert("Failed to start hackathon. See console for details.");
-    } finally {
-      setLoading(false);
+      console.error("Start timer failed:", err);
     }
   };
 
-  // Stop hackathon: POST to backend AND emit socket event
-  const handleStop = async () => {
-    setLoading(true);
+  // ✅ Stop Timer
+  const stopTimer = async () => {
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/hackathon/stop`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.message || "Failed to stop");
-
-      // emit stop event
+      await axios.post("https://codex-build-backend.onrender.com/api/hackathon/stop");
       socket.emit("stop_hackathon");
-
-      setStatus({ isActive: false, startTime: null });
     } catch (err) {
-      console.error("Stop error:", err);
-      alert("Failed to stop hackathon. See console for details.");
-    } finally {
-      setLoading(false);
+      console.error("Stop timer failed:", err);
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("adminToken");
-    router.push("/login");
+  const formatTime = (seconds) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-[#0a0a0a] text-white p-6">
-      <div className="max-w-3xl w-full bg-[#071018]/60 border border-[#e99b63]/20 rounded-2xl p-8">
-        <h1 className="text-3xl font-bold mb-4">Codex — Admin Panel</h1>
+    <section className="min-h-screen bg-[#0a0a0a] text-white flex flex-col items-center justify-center">
+      <motion.h1
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="text-4xl font-bold text-[#ffcc8f] mb-8"
+      >
+        🧠 CODEX Admin Control Panel
+      </motion.h1>
 
-        <div className="mb-6">
-          <p className="text-sm text-slate-300">Current status:</p>
-          <div className="mt-2 flex items-center gap-4">
-            <div className={`w-3 h-3 rounded-full ${status.isActive ? "bg-emerald-400" : "bg-gray-500"}`} />
-            <div>
-              <div className="font-semibold">{status.isActive ? "Active" : "Stopped"}</div>
-              {status.isActive && status.startTime && <div className="text-xs text-slate-400">Started at: {new Date(status.startTime).toLocaleString()}</div>}
-            </div>
-          </div>
+      <div className="bg-white/5 p-10 rounded-2xl border border-[#e99b63]/30 text-center w-full max-w-md backdrop-blur-lg shadow-lg">
+        <h2 className="text-2xl font-semibold mb-4">
+          Status:{" "}
+          <span
+            className={`${
+              status.isActive ? "text-green-400" : "text-red-400"
+            }`}
+          >
+            {status.isActive ? "Running" : "Stopped"}
+          </span>
+        </h2>
+
+        <p className="text-sm text-gray-400 mb-6">
+          {isConnected
+            ? "🟢 Connected to server"
+            : "🔴 Disconnected — check backend"}
+        </p>
+
+        <div className="text-6xl font-mono text-[#ffcc8f] mb-6">
+          {status.isActive ? formatTime(timeLeft) : "--:--"}
         </div>
 
-        <div className="flex gap-3 mb-6">
+        <div className="flex justify-center gap-6">
           <button
-            onClick={handleStart}
-            disabled={loading || status.isActive}
-            className="px-6 py-3 bg-emerald-400 text-black font-bold rounded disabled:opacity-50"
+            onClick={startTimer}
+            disabled={status.isActive}
+            className={`${
+              status.isActive
+                ? "bg-gray-600 cursor-not-allowed"
+                : "bg-gradient-to-r from-[#e99b63] to-[#ffcc8f]"
+            } text-black font-bold py-2 px-6 rounded-lg`}
           >
-            🚀 Start 110-min Timer
+            ▶ Start 110-min Timer
           </button>
-          <button
-            onClick={handleStop}
-            disabled={loading || !status.isActive}
-            className="px-6 py-3 bg-red-500 text-white font-bold rounded disabled:opacity-50"
-          >
-            🛑 Stop Timer
-          </button>
-          <button onClick={handleLogout} className="px-4 py-3 ml-auto border border-slate-600 rounded text-sm">Logout</button>
-        </div>
 
-        <div className="bg-[#02040a]/50 border border-[#e99b63]/10 p-4 rounded">
-          <h2 className="text-sm text-slate-200 font-semibold mb-2">Connected clients (debug)</h2>
-          <p className="text-xs text-slate-400">Open participant pages to see sockets connect. Check Render logs for server connection traces.</p>
+          <button
+            onClick={stopTimer}
+            disabled={!status.isActive}
+            className={`${
+              !status.isActive
+                ? "bg-gray-600 cursor-not-allowed"
+                : "bg-[#e99b63]"
+            } text-black font-bold py-2 px-6 rounded-lg`}
+          >
+            ⏹ Stop
+          </button>
         </div>
       </div>
-    </main>
+    </section>
   );
 }
