@@ -51,7 +51,6 @@ export default function AdminDashboard() {
       .catch((err) => console.error("Status fetch error:", err));
   }, []);
 
-  // ✅ Start Timer
   const startTimer = async () => {
     try {
       await axios.post("https://codex-build-backend.onrender.com/api/hackathon/start");
@@ -61,7 +60,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // ✅ Stop Timer
   const stopTimer = async () => {
     try {
       await axios.post("https://codex-build-backend.onrender.com/api/hackathon/stop");
@@ -71,7 +69,18 @@ export default function AdminDashboard() {
     }
   };
 
-  // ✅ Updated: Show HH:MM:SS
+  // ✅ New: Stop Responses Button Logic
+  const stopResponses = async () => {
+    try {
+      await axios.post("https://codex-build-backend.onrender.com/api/hackathon/stop-responses");
+      socket.emit("stop_responses");
+      alert("🛑 Participant responses have been stopped.");
+    } catch (err) {
+      console.error("Failed to stop responses:", err);
+      alert("Error: Could not stop responses.");
+    }
+  };
+
   const formatTime = (seconds) => {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
@@ -109,34 +118,43 @@ export default function AdminDashboard() {
             : "🔴 Disconnected — check backend"}
         </p>
 
-        {/* ✅ Updated Clock Display */}
         <div className="text-6xl font-mono text-[#ffcc8f] mb-6 tabular-nums">
           {status.isActive ? formatTime(timeLeft) : "--:--:--"}
         </div>
 
-        <div className="flex justify-center gap-6">
-          <button
-            onClick={startTimer}
-            disabled={status.isActive}
-            className={`${
-              status.isActive
-                ? "bg-gray-600 cursor-not-allowed"
-                : "bg-gradient-to-r from-[#e99b63] to-[#ffcc8f]"
-            } text-black font-bold py-2 px-6 rounded-lg`}
-          >
-            Start 110-min Timer
-          </button>
+        <div className="flex flex-col gap-4">
+          <div className="flex justify-center gap-6">
+            <button
+              onClick={startTimer}
+              disabled={status.isActive}
+              className={`${
+                status.isActive
+                  ? "bg-gray-600 cursor-not-allowed"
+                  : "bg-gradient-to-r from-[#e99b63] to-[#ffcc8f]"
+              } text-black font-bold py-2 px-6 rounded-lg`}
+            >
+              ▶ Start 110-min Timer
+            </button>
 
+            <button
+              onClick={stopTimer}
+              disabled={!status.isActive}
+              className={`${
+                !status.isActive
+                  ? "bg-gray-600 cursor-not-allowed"
+                  : "bg-[#e99b63]"
+              } text-black font-bold py-2 px-6 rounded-lg`}
+            >
+              ⏹ Stop
+            </button>
+          </div>
+
+          {/* ✅ New Stop Responses Button */}
           <button
-            onClick={stopTimer}
-            disabled={!status.isActive}
-            className={`${
-              !status.isActive
-                ? "bg-gray-600 cursor-not-allowed"
-                : "bg-[#e99b63]"
-            } text-black font-bold py-2 px-6 rounded-lg`}
+            onClick={stopResponses}
+            className="w-full bg-red-500/80 hover:bg-red-400 text-black font-bold py-3 rounded-lg tracking-widest transition-all duration-300 shadow-[0_0_20px_rgba(239,68,68,0.4)]"
           >
-             Stop
+            🛑 Stop Responses
           </button>
         </div>
       </div>
