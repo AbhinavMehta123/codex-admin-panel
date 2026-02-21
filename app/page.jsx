@@ -1,142 +1,100 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import axios from "axios";
-import { socket } from "@/utils/socket";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
 
-export default function AdminDashboard() {
-  const [status, setStatus] = useState({ isActive: false, startTime: null });
-  const [timeLeft, setTimeLeft] = useState(0);
-  const [isConnected, setIsConnected] = useState(false);
+export default function AdminLogin() {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
 
-  // ✅ Connect socket
-  useEffect(() => {
-    socket.on("connect", () => {
-      console.log("🟢 Connected to socket:", socket.id);
-      setIsConnected(true);
-    });
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
 
-    socket.on("disconnect", () => {
-      console.log("🔴 Disconnected from socket");
-      setIsConnected(false);
-    });
-
-    socket.on("hackathon_started", (data) => {
-      console.log("🚀 Hackathon started:", data);
-      setStatus({ isActive: true, startTime: new Date().toISOString() });
-    });
-
-    socket.on("hackathon_stopped", () => {
-      console.log("🛑 Hackathon stopped");
-      setStatus({ isActive: false, startTime: null });
-      setTimeLeft(0);
-    });
-
-    socket.on("timer_update", (remaining) => {
-      setTimeLeft(remaining);
-    });
-
-    return () => {
-      socket.off("connect");
-      socket.off("disconnect");
-      socket.off("hackathon_started");
-      socket.off("hackathon_stopped");
-      socket.off("timer_update");
-    };
-  }, []);
-
-  // ✅ Get current hackathon status from backend
-  useEffect(() => {
-    axios
-      .get("https://codex-build-backend.onrender.com/api/hackathon/status")
-      .then((res) => setStatus(res.data))
-      .catch((err) => console.error("Status fetch error:", err));
-  }, []);
-
-  // ✅ Start Timer (emits + updates DB)
-  const startTimer = async () => {
     try {
-      await axios.post("https://codex-build-backend.onrender.com/api/hackathon/start");
-      socket.emit("start_hackathon", 110 * 60);
-    } catch (err) {
-      console.error("Start timer failed:", err);
-    }
-  };
+      const res = await axios.post("https://codex-build-backend.onrender.com/api/admin/login", {
+        username,
+        password,
+      });
 
-  // ✅ Stop Timer
-  const stopTimer = async () => {
-    try {
-      await axios.post("https://codex-build-backend.onrender.com/api/hackathon/stop");
-      socket.emit("stop_hackathon");
+      if (res.data.success) {
+        localStorage.setItem("admin_token", res.data.token);
+        router.push("/AdminDashboard");
+      } else {
+        setError("Invalid credentials");
+      }
     } catch (err) {
-      console.error("Stop timer failed:", err);
+      console.error(err);
+      setError("Backend not reachable or invalid credentials.");
+    } finally {
+      setLoading(false);
     }
-  };
-
-  const formatTime = (seconds) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
 
   return (
-    <section className="min-h-screen bg-[#0a0a0a] text-white flex flex-col items-center justify-center">
-      <motion.h1
-        initial={{ opacity: 0, y: -20 }}
+    <main className="min-h-screen bg-[#02040a] text-cyan-400 font-mono flex flex-col items-center justify-center">
+      <motion.div
+        initial={{ opacity: 0, y: 40 }}
         animate={{ opacity: 1, y: 0 }}
-        className="text-4xl font-bold text-[#ffcc8f] mb-8"
+        transition={{ duration: 0.8 }}
+        className="bg-black/40 border border-cyan-500/20 p-10 rounded-2xl backdrop-blur-xl shadow-[0_0_40px_rgba(6,182,212,0.4)] w-full max-w-md"
       >
-        🧠 CODEX Admin Control Panel
-      </motion.h1>
+        <h1 className="text-center text-3xl font-black text-[#ffcc8f] mb-8 tracking-[0.25em] uppercase">
+          CODEX Admin Login
+        </h1>
 
-      <div className="bg-white/5 p-10 rounded-2xl border border-[#e99b63]/30 text-center w-full max-w-md backdrop-blur-lg shadow-lg">
-        <h2 className="text-2xl font-semibold mb-4">
-          Status:{" "}
-          <span
-            className={`${
-              status.isActive ? "text-green-400" : "text-red-400"
-            }`}
-          >
-            {status.isActive ? "Running" : "Stopped"}
-          </span>
-        </h2>
+        <form onSubmit={handleLogin} className="space-y-8">
+          <div>
+            <label className="block text-[10px] uppercase tracking-widest mb-3 text-cyan-500/50 font-bold italic">
+              01. Username
+            </label>
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="ENTER_USERNAME"
+              required
+              className="w-full bg-cyan-500/5 border-b border-cyan-500/30 p-4 text-white focus:outline-none focus:border-cyan-500 rounded-t-md text-lg"
+            />
+          </div>
 
-        <p className="text-sm text-gray-400 mb-6">
-          {isConnected
-            ? "🟢 Connected to server"
-            : "🔴 Disconnected — check backend"}
-        </p>
+          <div>
+            <label className="block text-[10px] uppercase tracking-widest mb-3 text-cyan-500/50 font-bold italic">
+              02. Password
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="ENTER_PASSWORD"
+              required
+              className="w-full bg-cyan-500/5 border-b border-cyan-500/30 p-4 text-white focus:outline-none focus:border-cyan-500 rounded-t-md text-lg"
+            />
+          </div>
 
-        <div className="text-6xl font-mono text-[#ffcc8f] mb-6">
-          {status.isActive ? formatTime(timeLeft) : "--:--"}
-        </div>
-
-        <div className="flex justify-center gap-6">
-          <button
-            onClick={startTimer}
-            disabled={status.isActive}
-            className={`${
-              status.isActive
-                ? "bg-gray-600 cursor-not-allowed"
-                : "bg-gradient-to-r from-[#e99b63] to-[#ffcc8f]"
-            } text-black font-bold py-2 px-6 rounded-lg`}
-          >
-            ▶ Start 110-min Timer
-          </button>
-
-          <button
-            onClick={stopTimer}
-            disabled={!status.isActive}
-            className={`${
-              !status.isActive
-                ? "bg-gray-600 cursor-not-allowed"
-                : "bg-[#e99b63]"
-            } text-black font-bold py-2 px-6 rounded-lg`}
-          >
-            ⏹ Stop
-          </button>
-        </div>
-      </div>
-    </section>
+          {error && (
+            <p className="text-red-500 text-center text-sm tracking-wide">
+              {error}
+            </p>
+          )}
+          <Link href="/admin" className="w-full">
+            <motion.button
+              whileHover={{ scale: 1.02, letterSpacing: "0.3em" }}
+              whileTap={{ scale: 0.98 }}
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-[#e99b63] to-[#ffcc8f] text-black font-black uppercase tracking-[0.3em] text-sm py-5 rounded-lg shadow-[0_0_25px_rgba(255,204,143,0.4)] hover:bg-white transition-all duration-500 cursor-pointer"
+            >
+              {loading ? "Authenticating..." : "Authorize Access"}
+            </motion.button>
+          </Link>
+        </form>
+      </motion.div>
+    </main>
   );
 }
